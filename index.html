@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura Mist | Instalación Inmersiva</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Quicksand', sans-serif;
+            color: #fff;
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #bgCanvas {
+            z-index: 1;
+            filter: blur(80px);
+            opacity: 0;
+            transition: opacity 2s ease;
+        }
+
+        #bgCanvas.active { opacity: 0.5; }
+
+        #canvas { z-index: 2; }
+
+        /* Viñeta para suavizar bordes de proyección */
+        .vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            pointer-events: none;
+            background: radial-gradient(circle, transparent 60%, rgba(0,0,0,0.9) 100%);
+        }
+
+        .bloom-active #canvas {
+            filter: contrast(1.1) brightness(1.2) blur(0.5px);
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 2rem;
+            z-index: 20;
+            transition: opacity 1s ease-in-out, visibility 1s;
+        }
+
+        .ui-hidden { opacity: 0; visibility: hidden; }
+
+        .top-settings {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            align-items: flex-end;
+            max-width: 260px;
+            max-height: 95vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .toggle-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.55rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1rem;
+            color: rgba(255, 255, 255, 0.6);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            backdrop-filter: blur(15px);
+            width: 100%;
+            text-align: right;
+        }
+
+        .toggle-btn.active {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.6);
+            color: #fff;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+        }
+
+        .slider-group {
+            background: rgba(255, 255, 255, 0.07);
+            padding: 0.8rem;
+            border-radius: 15px;
+            width: 100%;
+            pointer-events: auto;
+            margin-top: 0.3rem;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .slider-label {
+            font-size: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 0.3rem;
+            display: block;
+        }
+
+        input[type=range] {
+            width: 100%;
+            height: 2px;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            margin-bottom: 0.6rem;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(255,255,255,0.5);
+        }
+
+        .palette-group {
+            pointer-events: auto;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+
+        .palette-btn {
+            padding: 0.4rem 0.8rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.6rem;
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.7);
+            transition: all 0.4s ease;
+            cursor: pointer;
+        }
+
+        .palette-btn.active {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.8);
+            color: #fff;
+        }
+
+        .breath-guide {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 220px;
+            height: 220px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 1.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .breath-guide.active {
+            opacity: 1;
+            animation: breathe 8s infinite ease-in-out;
+        }
+
+        @keyframes breathe {
+            0%, 100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.1; }
+            50% { transform: translate(-50%, -50%) scale(1.3); opacity: 0.3; }
+        }
+
+        #denouement {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #fff;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #denouement.active { opacity: 1; pointer-events: auto; }
+
+        .section-title {
+            font-size: 0.45rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15rem;
+            color: rgba(255, 255, 255, 0.3);
+            margin-top: 0.8rem;
+            margin-bottom: 0.2rem;
+            width: 100%;
+            text-align: right;
+        }
+    </style>
+</head>
+<body class="bloom-active">
+
+    <div class="vignette"></div>
+    <canvas id="bgCanvas"></canvas>
+    <canvas id="canvas"></canvas>
+
+    <div id="denouement">
+        <div class="text-black text-3xl font-light italic tracking-[0.5em] opacity-30 uppercase">Unidad</div>
+    </div>
+
+    <div id="breathGuide" class="breath-guide">
+        <span id="breathText" class="text-[0.6rem] uppercase tracking-[0.4em] opacity-40">Respirar</span>
+    </div>
+
+    <div id="uiOverlay" class="ui-overlay">
+        <div class="top-settings">
+            <div class="section-title">Global</div>
+            <button id="toggleBloom" class="toggle-btn active">Efecto Bloom</button>
+            <button id="toggleMesh" class="toggle-btn">Mezcla Maestra</button>
+            <button id="toggleBreath" class="toggle-btn">Guía Respiratoria</button>
+            <button id="toggleAutoUI" class="toggle-btn active">Auto-Ocultar UI</button>
+
+            <div class="section-title">Dinámicas Colectivas</div>
+            <button id="toggleMandala" class="toggle-btn">Modo Mándala (Espejo)</button>
+            <button id="toggleVortex" class="toggle-btn">Vórtice de Sincronización</button>
+            <button id="toggleAuras" class="toggle-btn">Auras Estáticas</button>
+            <button id="toggleRepel" class="toggle-btn">Gravedad Repulsiva</button>
+            
+            <div class="section-title">Configuración Grupo</div>
+            <button id="toggleGroup" class="toggle-btn">Posiciones de Grupo</button>
+            <div id="groupSettings" class="slider-group hidden">
+                <label class="slider-label">Participantes: <span id="valPersons">10</span></label>
+                <input type="range" id="sliderPersons" min="2" max="24" value="10">
+                <label class="slider-label">Radio del Círculo</label>
+                <input type="range" id="sliderRadius" min="50" max="600" value="300">
+                <label class="slider-label">Tamaño de Plaza</label>
+                <input type="range" id="sliderSpotSize" min="30" max="250" value="80">
+            </div>
+
+            <div class="section-title">Sesión</div>
+            <button id="startTimer" class="toggle-btn">Iniciar Ritual (1m)</button>
+            
+            <div class="slider-group">
+                <label class="slider-label">Intensidad Luz</label>
+                <input type="range" id="sliderSize" min="20" max="180" value="70">
+                <label class="slider-label">Persistencia Humo</label>
+                <input type="range" id="sliderHalo" min="1" max="10" value="4">
+            </div>
+        </div>
+
+        <div class="text-center opacity-40 pointer-events-none mb-4">
+            <h1 class="font-serif italic text-2xl tracking-[0.3em]">AURA MIST</h1>
+            <p id="timerValue" class="text-[0.6rem] tracking-[0.5em] mt-3 hidden">01:00</p>
+        </div>
+
+        <div class="palette-group">
+            <button class="palette-btn active" data-palette="aurora">Aurora</button>
+            <button class="palette-btn" data-palette="ocean">Océano</button>
+            <button class="palette-btn" data-palette="forest">Bosque</button>
+            <button class="palette-btn" data-palette="fire">Fuego</button>
+            <button class="palette-btn" data-palette="nebula">Nebulosa</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const bgCanvas = document.getElementById('bgCanvas');
+        const ctx = canvas.getContext('2d');
+        const bgCtx = bgCanvas.getContext('2d');
+        
+        const uiOverlay = document.getElementById('uiOverlay');
+        const breathGuide = document.getElementById('breathGuide');
+        const breathText = document.getElementById('breathText');
+        const denouementEl = document.getElementById('denouement');
+        const timerDisplay = document.getElementById('timerValue');
+
+        // Botones
+        const btnMesh = document.getElementById('toggleMesh');
+        const btnBloom = document.getElementById('toggleBloom');
+        const btnBreath = document.getElementById('toggleBreath');
+        const btnMandala = document.getElementById('toggleMandala');
+        const btnVortex = document.getElementById('toggleVortex');
+        const btnAuras = document.getElementById('toggleAuras');
+        const btnRepel = document.getElementById('toggleRepel');
+        const btnGroup = document.getElementById('toggleGroup');
+        const btnTimer = document.getElementById('startTimer');
+        const btnAutoUI = document.getElementById('toggleAutoUI');
+        
+        // Sliders
+        const sliderSize = document.getElementById('sliderSize');
+        const sliderHalo = document.getElementById('sliderHalo');
+        const sliderPersons = document.getElementById('sliderPersons');
+        const sliderRadius = document.getElementById('sliderRadius');
+        const sliderSpotSize = document.getElementById('sliderSpotSize');
+        const valPersons = document.getElementById('valPersons');
+        const groupSettings = document.getElementById('groupSettings');
+
+        const paletteButtons = document.querySelectorAll('.palette-btn');
+
+        let width, height;
+        let meshActive = false, bloomActive = true, breathActive = false;
+        let autoUIActive = true, groupActive = false, repelActive = false;
+        let mandalaActive = false, vortexActive = false, aurasActive = false;
+        let isMeditating = false;
+        let uiTimer, particles = [];
+
+        let energySize = 70, haloAmount = 4;
+        let activeColors = ['#6366f1', '#a855f7', '#2dd4bf'];
+        let numPersons = 10, groupRadius = 300, spotSize = 80;
+
+        const palettes = {
+            aurora: ['#6366f1', '#a855f7', '#2dd4bf'],
+            ocean: ['#0ea5e9', '#2dd4bf', '#075985'],
+            forest: ['#10b981', '#064e3b', '#f59e0b'],
+            fire: ['#f59e0b', '#ef4444', '#7c2d12'],
+            nebula: ['#ec4899', '#6366f1', '#1e1b4b']
+        };
+
+        function resize() {
+            width = canvas.width = bgCanvas.width = window.innerWidth;
+            height = canvas.height = bgCanvas.height = window.innerHeight;
+        }
+        window.onresize = resize;
+        resize();
+
+        // UI Listeners
+        btnMesh.onclick = () => { meshActive = !meshActive; btnMesh.classList.toggle('active'); bgCanvas.classList.toggle('active'); };
+        btnBloom.onclick = () => { bloomActive = !bloomActive; btnBloom.classList.toggle('active'); document.body.classList.toggle('bloom-active'); };
+        btnBreath.onclick = () => { breathActive = !breathActive; btnBreath.classList.toggle('active'); breathGuide.classList.toggle('active'); if(breathActive) startBreathCycle(); };
+        btnAutoUI.onclick = () => { autoUIActive = !autoUIActive; btnAutoUI.classList.toggle('active'); if(!autoUIActive) showUI(); };
+        btnMandala.onclick = () => { mandalaActive = !mandalaActive; btnMandala.classList.toggle('active'); };
+        btnVortex.onclick = () => { vortexActive = !vortexActive; btnVortex.classList.toggle('active'); };
+        btnAuras.onclick = () => { aurasActive = !aurasActive; btnAuras.classList.toggle('active'); };
+        btnRepel.onclick = () => { repelActive = !repelActive; btnRepel.classList.toggle('active'); };
+        btnGroup.onclick = () => { groupActive = !groupActive; btnGroup.classList.toggle('active'); groupSettings.classList.toggle('hidden'); };
+        btnTimer.onclick = startMeditationSession;
+
+        sliderSize.oninput = (e) => energySize = parseInt(e.target.value);
+        sliderHalo.oninput = (e) => haloAmount = parseInt(e.target.value);
+        sliderPersons.oninput = (e) => { numPersons = parseInt(e.target.value); valPersons.innerText = numPersons; };
+        sliderRadius.oninput = (e) => groupRadius = parseInt(e.target.value);
+        sliderSpotSize.oninput = (e) => spotSize = parseInt(e.target.value);
+
+        paletteButtons.forEach(btn => {
+            btn.onclick = () => {
+                paletteButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                activeColors = palettes[btn.dataset.palette];
+            };
+        });
+
+        function startMeditationSession() {
+            if (isMeditating) return;
+            isMeditating = true;
+            btnTimer.classList.add('active');
+            timerDisplay.classList.remove('hidden');
+            let timeLeft = 60;
+            const timer = setInterval(() => {
+                timeLeft--;
+                const mins = Math.floor(timeLeft / 60), secs = timeLeft % 60;
+                timerDisplay.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                if (timeLeft <= 0) { clearInterval(timer); endMeditation(); }
+            }, 1000);
+        }
+
+        function endMeditation() {
+            denouementEl.classList.add('active');
+            uiOverlay.classList.add('ui-hidden');
+            setTimeout(() => {
+                denouementEl.classList.remove('active');
+                isMeditating = false;
+                btnTimer.classList.remove('active');
+                timerDisplay.classList.add('hidden');
+                showUI();
+                particles = [];
+            }, 6000);
+        }
+
+        function startBreathCycle() {
+            if (!breathActive) return;
+            const cycle = () => {
+                if (!breathActive) return;
+                breathText.innerText = "Inhala";
+                setTimeout(() => { if(breathActive) breathText.innerText = "Exhala"; }, 4000);
+            };
+            cycle();
+            setInterval(cycle, 8000);
+        }
+
+        function drawGroupPositions() {
+            if (!groupActive && !aurasActive) return;
+            const centerX = width / 2, centerY = height / 2;
+            const time = Date.now() * 0.0015;
+
+            for (let i = 0; i < numPersons; i++) {
+                const angle = (i / numPersons) * Math.PI * 2;
+                const x = centerX + Math.cos(angle) * groupRadius;
+                const y = centerY + Math.sin(angle) * groupRadius;
+                
+                if (groupActive) {
+                    // Círculos de alta visibilidad para calibración
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${0.4 + Math.sin(time*2)*0.2})`;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(x, y, spotSize, 0, Math.PI * 2);
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = `rgba(255, 255, 255, 0.05)`;
+                    ctx.fill();
+                }
+
+                if (aurasActive) {
+                    // Auras constantes bajo los pies
+                    const auraPulse = 0.8 + Math.sin(time + i) * 0.2;
+                    const g = ctx.createRadialGradient(x, y, 0, x, y, spotSize * 2 * auraPulse);
+                    const color = activeColors[i % activeColors.length];
+                    g.addColorStop(0, color.replace(')', ', 0.15)').replace('rgb', 'rgba'));
+                    g.addColorStop(1, 'transparent');
+                    ctx.fillStyle = g;
+                    ctx.beginPath();
+                    ctx.arc(x, y, spotSize * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        function showUI() {
+            uiOverlay.classList.remove('ui-hidden');
+            clearTimeout(uiTimer);
+            if (autoUIActive) uiTimer = setTimeout(() => uiOverlay.classList.add('ui-hidden'), 8000);
+        }
+
+        class Particle {
+            constructor(x, y, color, isAmbient = false) {
+                this.x = x; this.y = y;
+                this.vx = (Math.random() - 0.5) * (isAmbient ? 0.4 : 2);
+                this.vy = (Math.random() - 0.5) * (isAmbient ? 0.4 : 2);
+                this.alpha = 0;
+                this.targetAlpha = isAmbient ? 0.03 : 0.25;
+                this.size = Math.random() * energySize + (isAmbient ? 20 : energySize * 0.3);
+                this.color = color;
+                this.maxLife = Math.random() * 200 + 250;
+                this.life = this.maxLife;
+            }
+
+            update(mouseX, mouseY) {
+                if (vortexActive) {
+                    const dx = width/2 - this.x, dy = height/2 - this.y;
+                    this.vx += dx * 0.00015; this.vy += dy * 0.00015;
+                }
+                if (repelActive) {
+                    const dx = this.x - mouseX, dy = this.y - mouseY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < 300) {
+                        const force = (300 - dist) / 4000;
+                        this.vx += dx * force; this.vy += dy * force;
+                    }
+                }
+                this.x += this.vx; this.y += this.vy;
+                this.vx *= 0.992; this.vy *= 0.992;
+                this.life--;
+                const lp = this.life / this.maxLife;
+                this.alpha = (lp > 0.8) ? this.alpha + (this.targetAlpha - this.alpha) * 0.05 : lp * this.targetAlpha;
+            }
+
+            draw(context, x = this.x, y = this.y) {
+                context.globalAlpha = this.alpha;
+                const grad = context.createRadialGradient(x, y, 0, x, y, this.size);
+                grad.addColorStop(0, this.color);
+                grad.addColorStop(1, 'transparent');
+                context.fillStyle = grad;
+                context.beginPath();
+                context.arc(x, y, this.size, 0, Math.PI * 2);
+                context.fill();
+            }
+        }
+
+        function createSplat(x, y, dx, dy, isAmbient = false) {
+            const count = isAmbient ? 1 : haloAmount;
+            for(let i = 0; i < count; i++) {
+                const color = activeColors[Math.floor(Math.random() * activeColors.length)];
+                const p = new Particle(x, y, color, isAmbient);
+                if(!isAmbient) { p.vx += dx * 0.04; p.vy += dy * 0.04; }
+                particles.push(p);
+            }
+        }
+
+        let lastX = 0, lastY = 0;
+        const handleInput = (x, y) => {
+            showUI();
+            const dx = x - lastX, dy = y - lastY;
+            if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) createSplat(x, y, dx, dy);
+            lastX = x; lastY = y;
+        };
+
+        window.onmousemove = (e) => handleInput(e.clientX, e.clientY);
+        window.ontouchmove = (e) => handleInput(e.touches[0].clientX, e.touches[0].clientY);
+
+        function updateMesh() {
+            if (!meshActive) return;
+            const meshTime = Date.now() * 0.0003;
+            bgCtx.clearRect(0, 0, width, height);
+            activeColors.forEach((color, i) => {
+                const x = width / 2 + Math.cos(meshTime + i * 2) * width * 0.4;
+                const y = height / 2 + Math.sin(meshTime * 0.7 + i * 2) * height * 0.4;
+                const size = Math.min(width, height) * 0.8;
+                const g = bgCtx.createRadialGradient(x, y, 0, x, y, size);
+                g.addColorStop(0, color);
+                g.addColorStop(1, 'transparent');
+                bgCtx.globalAlpha = 0.3;
+                bgCtx.fillStyle = g;
+                bgCtx.beginPath();
+                bgCtx.arc(x, y, size, 0, Math.PI * 2);
+                bgCtx.fill();
+            });
+        }
+
+        function animate() {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = bloomActive ? 0.04 : 0.08;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, width, height);
+
+            updateMesh();
+            drawGroupPositions();
+
+            if (Math.random() > 0.96) createSplat(Math.random() * width, Math.random() * height, 0, 0, true);
+
+            particles = particles.filter(p => p.life > 0);
+            ctx.globalCompositeOperation = 'screen';
+            
+            particles.forEach(p => {
+                p.update(lastX, lastY);
+                p.draw(ctx);
+                
+                if (mandalaActive) {
+                    const centerX = width / 2, centerY = height / 2;
+                    const dx = p.x - centerX, dy = p.y - centerY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const angle = Math.atan2(dy, dx);
+                    
+                    for(let i = 1; i < 8; i++) {
+                        const symAngle = angle + (i * Math.PI * 2) / 8;
+                        const sx = centerX + Math.cos(symAngle) * dist;
+                        const sy = centerY + Math.sin(symAngle) * dist;
+                        p.draw(ctx, sx, sy);
+                    }
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        showUI();
+        animate();
+    </script>
+</body>
+</html>
